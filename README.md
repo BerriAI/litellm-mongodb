@@ -41,13 +41,21 @@ services:
   mongodb-sidecar:
     image: ghcr.io/berriai/litellm-mongodb:v0.1.0-beta.1
     network_mode: service:litellm
+    depends_on:
+      litellm:
+        condition: service_started
+        restart: true
     environment:
       MONGODB_CONNECTION_STRING: ${MONGODB_CONNECTION_STRING:?required}
       MONGODB_SIDECAR_API_KEY: ${MONGODB_SIDECAR_API_KEY:?required}
     restart: unless-stopped
 ```
 
-Replace `litellm` in `network_mode` with your existing LiteLLM service name. Pass the sidecar API key to that service and use `http://127.0.0.1:8080`. A sidecar in the same Kubernetes Pod uses the same loopback URL; use your chart's existing extra-container hooks and Kubernetes Secrets rather than adding a mandatory chart dependency
+Use Docker Compose 2.17 or later. Replace `litellm` in `network_mode` and `depends_on` with your existing LiteLLM service name. Pass the sidecar API key to that service and use `http://127.0.0.1:8080`. A sidecar in the same Kubernetes Pod uses the same loopback URL; use your chart's existing extra-container hooks and Kubernetes Secrets rather than adding a mandatory chart dependency
+
+Use `docker compose restart litellm` to restart LiteLLM and its dependent sidecar together. After changing the image or container configuration, use `docker compose up -d --force-recreate litellm mongodb-sidecar` to recreate both services
+
+The dependency's `restart: true` applies to Compose operations; Docker's automatic restart policy and a direct `docker restart` do not restart dependent services. If LiteLLM restarts outside Compose, run `docker compose restart mongodb-sidecar` after LiteLLM starts. Otherwise the sidecar can remain attached to the previous network namespace and MongoDB searches fail. Use a separate HTTPS deployment when the services need independent restart and recovery. See Docker's [dependency restart behavior](https://docs.docker.com/reference/compose-file/services/#depends_on)
 
 ## Configure LiteLLM
 

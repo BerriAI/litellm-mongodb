@@ -31,6 +31,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         platform: [linux/amd64, linux/arm64]
     steps:
@@ -46,7 +47,7 @@ jobs:
           docker run --rm --platform "$IMAGE_PLATFORM" --entrypoint python mongodb-sidecar-smoke -c 'import importlib.util, os, pymongo; from litellm_mongodb.app import create_app; assert os.getuid() == 10001; assert pymongo.version == "4.17.0"; assert all(importlib.util.find_spec(name) is None for name in ("litellm", "openai", "uv")); print("Runtime dependency isolation verified")'
           docker run -d --name mongodb-sidecar-smoke --platform "$IMAGE_PLATFORM" -p 127.0.0.1:8080:8080 -e 'MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1000' -e MONGODB_SIDECAR_API_KEY=image-smoke-only-key mongodb-sidecar-smoke
           trap 'docker rm -f mongodb-sidecar-smoke' EXIT
-          curl --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:8080/health/liveness
+          curl --fail --retry 20 --retry-all-errors --retry-delay 1 --max-time 5 http://127.0.0.1:8080/health/liveness
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/v1/vector_stores/index/search)" = 401
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health/readiness)" = 503
           curl --fail http://127.0.0.1:8080/health/liveness

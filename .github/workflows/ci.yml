@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff
         with:
-          version: "0.10.9"
+          version: "0.12.10"
           python-version: ${{ matrix.python }}
           enable-cache: true
       - run: uv sync --frozen

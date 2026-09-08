@@ -27,8 +27,32 @@ jobs:
       - run: uv run --no-sync pytest -q
       - run: uv build --no-sources
 
-  image:
+  image-smoke:
     needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130
+        with:
+          image: tonistiigi/binfmt@sha256:1b804311fe87047a4c96d38b4b3ef6f62fca8cd125265917a9e3dc3c996c39e6
+      - name: Build and exercise the runtime
+        env:
+          IMAGE_PLATFORM: ${{ matrix.platform }}
+        run: |
+          docker build --platform "$IMAGE_PLATFORM" -t mongodb-sidecar-smoke .
+          docker run --rm --platform "$IMAGE_PLATFORM" --entrypoint python mongodb-sidecar-smoke -c 'import importlib.util, os, pymongo; from litellm_mongodb.app import create_app; assert os.getuid() == 10001; assert pymongo.version == "4.17.0"; assert all(importlib.util.find_spec(name) is None for name in ("litellm", "openai", "uv")); print("Runtime dependency isolation verified")'
+          docker run -d --name mongodb-sidecar-smoke --platform "$IMAGE_PLATFORM" -p 127.0.0.1:8080:8080 -e 'MONGODB_CONNECTION_STRING=mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=1000' -e MONGODB_SIDECAR_API_KEY=image-smoke-only-key mongodb-sidecar-smoke
+          trap 'docker rm -f mongodb-sidecar-smoke' EXIT
+          curl --fail --retry 20 --retry-connrefused --retry-delay 1 http://127.0.0.1:8080/health/liveness
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/v1/vector_stores/index/search)" = 401
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/health/readiness)" = 503
+          curl --fail http://127.0.0.1:8080/health/liveness
+
+  image:
+    needs: image-smoke
     runs-on: ubuntu-latest
     permissions:
       contents: write

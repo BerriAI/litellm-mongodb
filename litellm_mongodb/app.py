@@ -77,7 +77,7 @@ def create_app(settings: Settings | None = None, backend: SearchBackend | None =
             raise RuntimeError(
                 "Cannot initialize MongoDB. Check the sidecar connection string and TLS files."
             ) from None
-        app.state.search_backend = MongoSearch(client, configuration.operation_timeout_ms)
+        app.state.search_backend = MongoSearch(client)
         try:
             yield
         finally:

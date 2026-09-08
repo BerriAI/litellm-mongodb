@@ -101,9 +101,8 @@ def search_result(document: Mapping[str, object], text_field: str) -> SearchResu
 
 
 class MongoSearch:
-    def __init__(self, client: AsyncMongoClient[dict[str, object]], operation_timeout_ms: int = 30_000) -> None:
+    def __init__(self, client: AsyncMongoClient[dict[str, object]]) -> None:
         self.client: Final = client
-        self.operation_timeout_ms: Final = operation_timeout_ms
 
     async def ready(self) -> bool:
         try:
@@ -128,7 +127,7 @@ class MongoSearch:
         ]
         try:
             target: Final = self.client[request.mongodb_database][request.mongodb_collection]
-            with timeout(min(request.timeout_ms, self.operation_timeout_ms) / 1000):
+            with timeout(request.timeout_ms / 1000):
                 async with await target.aggregate(pipeline) as cursor:
                     documents: Final = await cursor.to_list(length=request.max_num_results)
                 if not documents:

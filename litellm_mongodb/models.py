@@ -14,7 +14,7 @@ class SearchRequest(BaseModel):
     mongodb_embedding_field: str = Field(default="embedding", min_length=1)
     max_num_results: int = Field(default=10, ge=1, le=50)
     mongodb_num_candidates: int | None = Field(default=None, ge=1, le=10_000)
-    timeout_ms: Annotated[int, Field(gt=0, le=30_000)] = 30_000
+    timeout_ms: Annotated[int, Field(gt=0)] = 30_000
 
     @field_validator("query_vector", mode="before")
     @classmethod

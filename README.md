@@ -32,7 +32,7 @@ Each secret can instead be supplied through `MONGODB_CONNECTION_STRING_FILE` or 
 
 MongoDB TLS settings remain in the connection string, including `tlsCAFile` and `tlsCertificateKeyFile`. Mount those files read-only at the paths used inside the container. Certificate verification stays enabled by default
 
-Use a private container network for service-to-service communication. If the HTTP hop crosses an untrusted network, put the service behind an HTTPS reverse proxy. Do not expose its HTTP port publicly
+LiteLLM requires HTTPS for remote sidecars. HTTP is accepted only for literal loopback IPs such as `127.0.0.1` or `[::1]`, where LiteLLM and the sidecar share a host or network namespace. For a separate host or Deployment, put the service behind an HTTPS reverse proxy with a certificate trusted by LiteLLM. Do not expose the service's HTTP port publicly
 
 For Docker Compose, add the service only when MongoDB is enabled:
 
@@ -40,13 +40,14 @@ For Docker Compose, add the service only when MongoDB is enabled:
 services:
   mongodb-sidecar:
     image: ghcr.io/berriai/litellm-mongodb:v0.1.0-beta.1
+    network_mode: service:litellm
     environment:
       MONGODB_CONNECTION_STRING: ${MONGODB_CONNECTION_STRING:?required}
       MONGODB_SIDECAR_API_KEY: ${MONGODB_SIDECAR_API_KEY:?required}
     restart: unless-stopped
 ```
 
-Connect your LiteLLM container to the same Compose network and use `http://mongodb-sidecar:8080`. A sidecar in the same Kubernetes Pod uses `http://127.0.0.1:8080`; use your chart's existing extra-container hooks and Kubernetes Secrets rather than adding a mandatory chart dependency
+Replace `litellm` in `network_mode` with your existing LiteLLM service name. Pass the sidecar API key to that service and use `http://127.0.0.1:8080`. A sidecar in the same Kubernetes Pod uses the same loopback URL; use your chart's existing extra-container hooks and Kubernetes Secrets rather than adding a mandatory chart dependency
 
 ## Configure LiteLLM
 
@@ -58,7 +59,7 @@ vector_store_registry:
     litellm_params:
       vector_store_id: policy_vector_index
       custom_llm_provider: mongodb
-      api_base: http://mongodb-sidecar:8080
+      api_base: http://127.0.0.1:8080
       api_key: os.environ/MONGODB_SIDECAR_API_KEY
       mongodb_database: knowledge
       mongodb_collection: policies
@@ -96,7 +97,7 @@ This BETA supports retrieval only. It does not support ingestion, collection/ind
 
 `GET /health/liveness` checks that the HTTP process is running. `GET /health/readiness` performs a bounded MongoDB ping. Neither endpoint returns credentials. An outage makes readiness fail while the process remains available to recover
 
-One asynchronous MongoDB client and its connection pool are reused per process. Pool size is bounded at 100 connections per server, connection/server-selection timeout at 10 seconds, and operation/pool-wait timeout at 30 seconds. A shorter LiteLLM read timeout reduces the search deadline. Disconnected HTTP requests cancel their in-flight work. Shutdown closes the client
+One asynchronous MongoDB client and its connection pool are reused per process. Pool size is bounded at 100 connections per server and connection/server-selection timeout at 10 seconds. The operation/pool-wait timeout defaults to 30 seconds; a supplied LiteLLM read timeout sets the per-search deadline, including values longer than 30 seconds. Disconnected HTTP requests cancel their in-flight work. Shutdown closes the client
 
 Errors distinguish invalid configuration or database permissions (400), sidecar authentication (401), timeout (408), unavailable connections (503), and unexpected failures (500). Empty results are checked against index metadata so a missing or building index cannot look like a successful empty search. Driver errors are sanitized before they cross the HTTP boundary
 
